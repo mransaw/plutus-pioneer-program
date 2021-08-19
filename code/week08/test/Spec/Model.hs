@@ -65,6 +65,7 @@ instance ContractModel TSModel where
             | AddTokens Wallet Wallet Integer
             | Withdraw Wallet Wallet Integer Integer
             | BuyTokens Wallet Wallet Integer
+            | Close Wallet Wallet
         deriving (Show, Eq)
 
     data ContractInstanceKey TSModel w s e where
@@ -127,6 +128,16 @@ instance ContractModel TSModel where
                         (tsModel . ix v . tssToken) $~ (+ (- n))
                 _ -> return ()
         wait 1
+        
+    nextState (Close v w) = do
+        when (v == w) $ do
+            m <- getTSState v
+            case m of
+                Just t -> do
+                    deposit w $ lovelaceValueOf (t ^. tssLovelace) <> assetClassValue (tokens Map.! w) (t ^. tssToken)
+                    (tsModel . ix v . tssLovelace) $= 0
+                    (tsModel . ix v . tssToken) $= 0
+                _ -> return () 
 
     perform h _ cmd = case cmd of
         (Start w)          -> callEndpoint @"start"      (h $ StartKey w) (tokenCurrencies Map.! w, tokenNames Map.! w, False) >> delay 1
@@ -134,12 +145,14 @@ instance ContractModel TSModel where
         (AddTokens v w n)  -> callEndpoint @"add tokens" (h $ UseKey v w) n                                                    >> delay 1
         (BuyTokens v w n)  -> callEndpoint @"buy tokens" (h $ UseKey v w) n                                                    >> delay 1
         (Withdraw v w n l) -> callEndpoint @"withdraw"   (h $ UseKey v w) (n, l)                                               >> delay 1
+        (Close v w)        -> callEndpoint @"close"      (h $ UseKey v w) ()                                                   >> delay 1  
 
     precondition s (Start w)          = isNothing $ getTSState' s w
     precondition s (SetPrice v _ _)   = isJust    $ getTSState' s v
     precondition s (AddTokens v _ _)  = isJust    $ getTSState' s v
     precondition s (BuyTokens v _ _)  = isJust    $ getTSState' s v
     precondition s (Withdraw v _ _ _) = isJust    $ getTSState' s v
+    precondition s (Close v _)        = isJust    $ getTSState' s v
 
 deriving instance Eq (ContractInstanceKey TSModel w s e)
 deriving instance Show (ContractInstanceKey TSModel w s e)

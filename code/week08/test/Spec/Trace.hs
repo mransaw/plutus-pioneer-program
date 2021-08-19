@@ -38,7 +38,7 @@ tests :: TestTree
 tests = checkPredicateOptions
     (defaultCheckOptions & emulatorConfig .~ emCfg)
     "token sale trace"
-    (     walletFundsChange (Wallet 1) (Ada.lovelaceValueOf   10_000_000  <> assetClassValue token (-60))
+    (     walletFundsChange (Wallet 1) (Ada.lovelaceValueOf   25_000_000  <> assetClassValue token (-25))
      .&&. walletFundsChange (Wallet 2) (Ada.lovelaceValueOf (-20_000_000) <> assetClassValue token   20)
      .&&. walletFundsChange (Wallet 3) (Ada.lovelaceValueOf (- 5_000_000) <> assetClassValue token    5)
     )
@@ -90,4 +90,7 @@ myTrace = do
             void $ Emulator.waitNSlots 5
 
             callEndpoint @"withdraw" h1 (40, 10_000_000)
+            void $ Emulator.waitNSlots 5
+            
+            callEndpoint @"close" h1 ()
             void $ Emulator.waitNSlots 5

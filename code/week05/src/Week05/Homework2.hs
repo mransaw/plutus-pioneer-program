@@ -34,19 +34,52 @@ import           Wallet.Emulator.Wallet
 {-# INLINABLE mkPolicy #-}
 -- Minting policy for an NFT, where the minting transaction must consume the given UTxO as input
 -- and where the TokenName will be the empty ByteString.
+
+tn = TokenName emptyByteString
+
 mkPolicy :: TxOutRef -> () -> ScriptContext -> Bool
-mkPolicy oref () ctx = True -- FIX ME!
+mkPolicy oref () ctx = traceIfFalse "only one NFT may be minted" oneMinted &&
+		       traceIfFalse "transaction must consume the given UTxO" givenUtxoUsed
+  where
+    info :: TxInfo
+    info = scriptContextTxInfo ctx
+
+    oneMinted :: Bool
+    oneMinted = case flattenValue (txInfoForge info) of
+	[(cs, tn', amt)] -> cs == ownCurrencySymbol ctx && tn' == tn && amt == 1
+	_ 		 -> False
+
+    givenUtxoUsed :: Bool
+    givenUtxoUsed = any (\i -> txInInfoOutRef i == oref) $ txInfoInputs info
+ -- FIX ME!
 
 policy :: TxOutRef -> Scripts.MintingPolicy
-policy oref = undefined -- IMPLEMENT ME!
+policy oref = mkMintingPolicyScript $
+    $$(PlutusTx.compile [|| \oref' -> Scripts.wrapMintingPolicy $ mkPolicy oref' ||])
+    `PlutusTx.applyCode`
+    PlutusTx.liftCode oref
+ -- IMPLEMENT ME!
 
 curSymbol :: TxOutRef -> CurrencySymbol
-curSymbol = undefined -- IMPLEMENT ME!
+curSymbol oref = scriptCurrencySymbol $ policy oref
+-- IMPLEMENT ME!
 
 type NFTSchema = Endpoint "mint" ()
 
 mint :: Contract w NFTSchema Text ()
-mint = undefined -- IMPLEMENT ME!
+mint = do
+    pk    <- Contract.ownPubKey
+    utxos <- utxoAt (pubKeyAddress pk)
+    case Map.keys utxos of
+        []       -> Contract.logError @String "no UTxO found"
+        oref : _ -> do
+            let val = Value.singleton (curSymbol oref) tn 1
+                lookups = Constraints.mintingPolicy (policy oref) <> Constraints.unspentOutputs utxos
+                tx = Constraints.mustMintValue val <> Constraints.mustSpendPubKeyOutput oref
+            ledgerTx <- submitTxConstraintsWith @Void lookups tx
+            void $ awaitTxConfirmed $ txId ledgerTx
+            Contract.logInfo @String $ printf "forged %s" (show val)
+ -- IMPLEMENT ME!
 
 endpoints :: Contract () NFTSchema Text ()
 endpoints = mint' >> endpoints
@@ -62,5 +95,7 @@ test = runEmulatorTraceIO $ do
     h1 <- activateContractWallet (Wallet 1) endpoints
     h2 <- activateContractWallet (Wallet 2) endpoints
     callEndpoint @"mint" h1 ()
+    callEndpoint @"mint" h2 ()
+    void $ Emulator.waitNSlots 1
     callEndpoint @"mint" h2 ()
     void $ Emulator.waitNSlots 1
