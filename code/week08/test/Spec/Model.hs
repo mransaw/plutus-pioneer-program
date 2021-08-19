@@ -79,7 +79,8 @@ instance ContractModel TSModel where
         [ SetPrice  <$> genWallet <*> genWallet <*> genNonNeg ]               ++
         [ AddTokens <$> genWallet <*> genWallet <*> genNonNeg ]               ++
         [ BuyTokens <$> genWallet <*> genWallet <*> genNonNeg ]               ++
-        [ Withdraw  <$> genWallet <*> genWallet <*> genNonNeg <*> genNonNeg ]
+        [ Withdraw  <$> genWallet <*> genWallet <*> genNonNeg <*> genNonNeg ] ++
+        [ Close     <$> genWallet <*> genWallet ]
 
     initialState = TSModel Map.empty
 
@@ -135,9 +136,9 @@ instance ContractModel TSModel where
             case m of
                 Just t -> do
                     deposit w $ lovelaceValueOf (t ^. tssLovelace) <> assetClassValue (tokens Map.! w) (t ^. tssToken)
-                    (tsModel . ix v . tssLovelace) $= 0
-                    (tsModel . ix v . tssToken) $= 0
+                    (tsModel . at v) $= Nothing
                 _ -> return () 
+        wait 1
 
     perform h _ cmd = case cmd of
         (Start w)          -> callEndpoint @"start"      (h $ StartKey w) (tokenCurrencies Map.! w, tokenNames Map.! w, False) >> delay 1

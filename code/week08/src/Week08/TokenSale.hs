@@ -89,7 +89,8 @@ transition ts s r = case (stateValue s, stateData s, r) of
 
 {-# INLINABLE tsStateMachine #-}
 tsStateMachine :: TokenSale -> StateMachine (Maybe Integer) TSRedeemer
-tsStateMachine ts = mkStateMachine (tsTT ts) (transition ts) (const False)
+tsStateMachine ts = mkStateMachine (tsTT ts) (transition ts) isNothing
+-- mkStateMachine <ThreadToken> <transitions> <final state>
 
 {-# INLINABLE mkTSValidator #-}
 mkTSValidator :: TokenSale -> (Maybe Integer) -> TSRedeemer -> ScriptContext -> Bool
